@@ -67,7 +67,7 @@ const History = {
       const label = formatWeekRange(e.weekStart, e.weekEnd);
       return `
         <tr class="history-row" data-week="${e.weekStart}">
-          <td>${label}</td>
+          <td>${label}${e.adsPaused ? ' <span class="tag amber" style="font-size:10px;padding:1px 6px;margin-left:6px;vertical-align:middle">Ads off</span>' : ''}</td>
           <td class="mono-cell">${e.netRevenue != null ? fmtDollar(e.netRevenue) : '—'}</td>
           <td class="mono-cell">${e.grossMargin != null && e.netRevenue ? fmtPct(e.grossMargin) : '—'}</td>
           <td class="mono-cell">${e.quotesSent ? fmtPct(e.closeRate) : '—'}</td>

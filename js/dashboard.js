@@ -14,7 +14,10 @@ const Dashboard = {
         <div class="page-header">
           <div>
             <h1 class="page-title">Dashboard</h1>
-            <p class="page-subtitle">${latest ? 'Week of ' + formatWeekRange(latest.weekStart, latest.weekEnd) : 'No data yet — enter your first week to get started'}</p>
+            <p class="page-subtitle" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${latest ? 'Week of ' + formatWeekRange(latest.weekStart, latest.weekEnd) : 'No data yet — enter your first week to get started'}
+            ${latest?.adsPaused ? '<span class="tag amber" style="vertical-align:middle">Ads paused</span>' : ''}
+          </p>
           </div>
         </div>
 

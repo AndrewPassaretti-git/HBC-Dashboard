@@ -5,9 +5,24 @@
 const Charts = {
 
   /**
+   * Extract values for an ad-specific field from raw storage entries (oldest first).
+   * Returns null for any week where adsPaused === true so those weeks are
+   * automatically skipped by drawSparkline's null-filter, keeping ad averages clean.
+   * Non-ad fields (revenue, pipeline, GA4) should be extracted directly without this helper.
+   *
+   * @param {object[]} entries - raw storage entries, oldest first
+   * @param {string}   field   - field name to extract (e.g. 'fbSpend', 'googleCost')
+   * @returns {(number|null)[]}
+   */
+  extractAdData(entries, field) {
+    return entries.map(e => e.adsPaused ? null : (e[field] ?? null));
+  },
+
+  /**
    * Draw a sparkline on a canvas element.
+   * Null values in data are excluded from the line (useful for paused-week gaps).
    * @param {HTMLCanvasElement} canvas
-   * @param {number[]} data - array of values (oldest first)
+   * @param {(number|null)[]} data - array of values (oldest first); null = skip point
    * @param {object} opts
    */
   drawSparkline(canvas, data, opts = {}) {

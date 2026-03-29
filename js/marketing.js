@@ -2,6 +2,13 @@
  * marketing.js — Marketing page view + form
  */
 
+// Ad-specific field IDs — used for disabling when ads are paused
+const AD_FIELD_IDS = [
+  'fbImpressions','fbClicks','fbSpend','fbLeads','fbCostPerLead','fbAvgCPC',
+  'googleImpressions','googleClicks','googleCost','googleCTR','googleAvgCPC',
+  'googleConversions','googleConversionRate',
+];
+
 const Marketing = {
 
   renderView(container, entry) {
@@ -24,6 +31,37 @@ const Marketing = {
     `;
 
     function adPerformancePanel(e) {
+      if (e.adsPaused) {
+        return `
+          <div class="section">
+            <div class="section-title" style="display:flex;align-items:center;gap:8px">
+              Ad Performance
+              <span class="tag amber">Ads paused</span>
+            </div>
+            <div class="two-col">
+              <div class="panel">
+                <div class="panel-header">
+                  <span class="panel-title">Facebook / Meta</span>
+                  <span class="tag amber" style="font-size:10px">Paused</span>
+                </div>
+                <div class="panel-body">
+                  <div class="muted" style="font-size:13px;padding:8px 0">No ad data recorded — ads were paused this week.</div>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-header">
+                  <span class="panel-title">Google Ads</span>
+                  <span class="tag amber" style="font-size:10px">Paused</span>
+                </div>
+                <div class="panel-body">
+                  <div class="muted" style="font-size:13px;padding:8px 0">No ad data recorded — ads were paused this week.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
       const fbCTR = e.fbImpressions ? ((e.fbClicks / e.fbImpressions) * 100).toFixed(2) + '%' : '—';
       return `
         <div class="section">
@@ -108,8 +146,9 @@ const Marketing = {
 
     function pipelinePanel(e) {
       const closeRate = e.quotesSent ? e.quotesClosed / e.quotesSent : 0;
-      const totalSpend = (e.fbSpend || 0) + (e.googleCost || 0);
-      const costPerClose = e.quotesClosed ? totalSpend / e.quotesClosed : 0;
+      // Do not show ad spend-derived cost-per-close when ads were paused
+      const totalSpend = e.adsPaused ? null : (e.fbSpend || 0) + (e.googleCost || 0);
+      const costPerClose = (!e.adsPaused && e.quotesClosed && totalSpend) ? totalSpend / e.quotesClosed : null;
 
       return `
         <div class="section">
@@ -139,8 +178,8 @@ const Marketing = {
                 </div>
               </div>
               <div class="two-col">
-                ${statPanel('Total Ad Spend', fmtDollar(totalSpend), '')}
-                ${statPanel('Cost Per Close', costPerClose ? fmtDollar(costPerClose) : '—', '')}
+                ${statPanel('Total Ad Spend', e.adsPaused ? '—' : fmtDollar(totalSpend), e.adsPaused ? 'Ads paused' : '')}
+                ${statPanel('Cost Per Close', costPerClose != null ? fmtDollar(costPerClose) : '—', e.adsPaused ? 'Ads paused' : '')}
               </div>
             </div>
           </div>
@@ -168,7 +207,7 @@ const Marketing = {
         <div class="metric-card">
           <span class="metric-label">${label}</span>
           <span class="metric-value" style="font-size:20px">${value}</span>
-          ${sub ? `<span class="metric-sub">${sub}</span>` : ''}
+          ${sub ? `<span class="metric-sub muted">${sub}</span>` : ''}
         </div>
       `;
     }
@@ -176,75 +215,90 @@ const Marketing = {
 
   renderForm(container, weekStart, existing) {
     const e = existing || {};
+    const paused = !!e.adsPaused;
 
     container.innerHTML = `
       <div class="page form-page">
+
+        <div style="margin-bottom:24px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);display:flex;align-items:center;gap:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin:0">
+            <input type="checkbox" id="adsPaused" ${paused ? 'checked' : ''}
+              style="width:16px;height:16px;accent-color:#f59e0b;cursor:pointer;flex-shrink:0">
+            <span style="font-size:14px;font-weight:500;color:var(--text)">Ads paused this week</span>
+          </label>
+          <span style="font-size:12px;color:var(--text-muted)">Greys out all FB &amp; Google ad fields and excludes this week from ad averages</span>
+        </div>
+
         <div class="form-section">
           <div class="form-section-title">Facebook / Meta Ads</div>
-          <div class="form-row-3">
-            <div class="form-group">
-              <label class="form-label">Impressions</label>
-              <input class="form-input" type="number" id="fbImpressions" value="${val(e.fbImpressions)}" placeholder="0">
+          <div id="fbAdFields">
+            <div class="form-row-3">
+              <div class="form-group">
+                <label class="form-label">Impressions</label>
+                <input class="form-input" type="number" id="fbImpressions" value="${val(e.fbImpressions)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Clicks</label>
+                <input class="form-input" type="number" id="fbClicks" value="${val(e.fbClicks)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Spend ($)</label>
+                <input class="form-input" type="number" step="0.01" id="fbSpend" value="${val(e.fbSpend)}" placeholder="0.00">
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Clicks</label>
-              <input class="form-input" type="number" id="fbClicks" value="${val(e.fbClicks)}" placeholder="0">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Spend ($)</label>
-              <input class="form-input" type="number" step="0.01" id="fbSpend" value="${val(e.fbSpend)}" placeholder="0.00">
-            </div>
-          </div>
-          <div class="form-row-3">
-            <div class="form-group">
-              <label class="form-label">Leads</label>
-              <input class="form-input" type="number" id="fbLeads" value="${val(e.fbLeads)}" placeholder="0">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Cost Per Lead ($)</label>
-              <input class="form-input" type="number" step="0.01" id="fbCostPerLead" value="${val(e.fbCostPerLead)}" placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Avg CPC ($)</label>
-              <input class="form-input" type="number" step="0.01" id="fbAvgCPC" value="${val(e.fbAvgCPC)}" placeholder="0.00">
+            <div class="form-row-3">
+              <div class="form-group">
+                <label class="form-label">Leads</label>
+                <input class="form-input" type="number" id="fbLeads" value="${val(e.fbLeads)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Cost Per Lead ($)</label>
+                <input class="form-input" type="number" step="0.01" id="fbCostPerLead" value="${val(e.fbCostPerLead)}" placeholder="0.00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Avg CPC ($)</label>
+                <input class="form-input" type="number" step="0.01" id="fbAvgCPC" value="${val(e.fbAvgCPC)}" placeholder="0.00">
+              </div>
             </div>
           </div>
         </div>
 
         <div class="form-section">
           <div class="form-section-title">Google Ads</div>
-          <div class="form-row-3">
-            <div class="form-group">
-              <label class="form-label">Impressions</label>
-              <input class="form-input" type="number" id="googleImpressions" value="${val(e.googleImpressions)}" placeholder="0">
+          <div id="googleAdFields">
+            <div class="form-row-3">
+              <div class="form-group">
+                <label class="form-label">Impressions</label>
+                <input class="form-input" type="number" id="googleImpressions" value="${val(e.googleImpressions)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Clicks</label>
+                <input class="form-input" type="number" id="googleClicks" value="${val(e.googleClicks)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Cost ($)</label>
+                <input class="form-input" type="number" step="0.01" id="googleCost" value="${val(e.googleCost)}" placeholder="0.00">
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Clicks</label>
-              <input class="form-input" type="number" id="googleClicks" value="${val(e.googleClicks)}" placeholder="0">
+            <div class="form-row-3">
+              <div class="form-group">
+                <label class="form-label">CTR (%)</label>
+                <input class="form-input" type="number" step="0.01" id="googleCTR" value="${val(e.googleCTR)}" placeholder="0.00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Avg CPC ($)</label>
+                <input class="form-input" type="number" step="0.01" id="googleAvgCPC" value="${val(e.googleAvgCPC)}" placeholder="0.00">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Conversions</label>
+                <input class="form-input" type="number" id="googleConversions" value="${val(e.googleConversions)}" placeholder="0">
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Cost ($)</label>
-              <input class="form-input" type="number" step="0.01" id="googleCost" value="${val(e.googleCost)}" placeholder="0.00">
-            </div>
-          </div>
-          <div class="form-row-3">
-            <div class="form-group">
-              <label class="form-label">CTR (%)</label>
-              <input class="form-input" type="number" step="0.01" id="googleCTR" value="${val(e.googleCTR)}" placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Avg CPC ($)</label>
-              <input class="form-input" type="number" step="0.01" id="googleAvgCPC" value="${val(e.googleAvgCPC)}" placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Conversions</label>
-              <input class="form-input" type="number" id="googleConversions" value="${val(e.googleConversions)}" placeholder="0">
-            </div>
-          </div>
-          <div class="form-row-2">
-            <div class="form-group">
-              <label class="form-label">Conversion Rate (%)</label>
-              <input class="form-input" type="number" step="0.01" id="googleConversionRate" value="${val(e.googleConversionRate)}" placeholder="0.00">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">Conversion Rate (%)</label>
+                <input class="form-input" type="number" step="0.01" id="googleConversionRate" value="${val(e.googleConversionRate)}" placeholder="0.00">
+              </div>
             </div>
           </div>
         </div>
@@ -330,52 +384,89 @@ const Marketing = {
   },
 
   attachFormListeners(container, weekStart, existing) {
-    const ids = [
-      'fbImpressions','fbClicks','fbSpend','fbLeads','fbCostPerLead','fbAvgCPC',
-      'googleImpressions','googleClicks','googleCost','googleCTR','googleAvgCPC',
-      'googleConversions','googleConversionRate','totalUsers','usersDirects','usersOrganic',
-      'usersReferral','leadSourceAttribution','quotesSent','quotesClosed',
-      'dollarValueQuotesSent','pipelineValue'
+    const nonAdIds = [
+      'totalUsers','usersDirects','usersOrganic','usersReferral',
+      'leadSourceAttribution','quotesSent','quotesClosed',
+      'dollarValueQuotesSent','pipelineValue',
     ];
+    const allIds = [...AD_FIELD_IDS, ...nonAdIds];
 
-    const updateLive = () => {
-      const sent = parseFloat(g('quotesSent')) || 0;
-      const closed = parseFloat(g('quotesClosed')) || 0;
-      const fbSpend = parseFloat(g('fbSpend')) || 0;
-      const gCost = parseFloat(g('googleCost')) || 0;
-      const totalSpend = fbSpend + gCost;
-      const closeRate = sent ? closed / sent : 0;
-      const costPerClose = closed ? totalSpend / closed : 0;
+    // ── Pause toggle ──────────────────────────────────────────
+    const pauseChk = container.querySelector('#adsPaused');
 
-      set('liveCloseRate', fmtPct(closeRate));
-      set('liveTotalSpend', fmtDollar(totalSpend));
-      set('liveCostPerClose', closed ? fmtDollar(costPerClose) : '—');
+    const applyPausedState = (paused) => {
+      AD_FIELD_IDS.forEach(id => {
+        const el = container.querySelector('#' + id);
+        if (!el) return;
+        el.disabled = paused;
+        el.style.opacity = paused ? '0.35' : '';
+        el.style.cursor  = paused ? 'not-allowed' : '';
+      });
+      // Update live calcs immediately when toggling
+      updateLive();
     };
 
-    ids.forEach(id => {
+    pauseChk.addEventListener('change', () => applyPausedState(pauseChk.checked));
+
+    // ── Live calculations ─────────────────────────────────────
+    const updateLive = () => {
+      const paused = pauseChk.checked;
+      const sent   = parseFloat(g('quotesSent'))  || 0;
+      const closed = parseFloat(g('quotesClosed')) || 0;
+      const closeRate = sent ? closed / sent : 0;
+
+      set('liveCloseRate', sent ? fmtPct(closeRate) : '—');
+
+      if (paused) {
+        set('liveTotalSpend',  'Paused');
+        set('liveCostPerClose','—');
+      } else {
+        const fbSpend   = parseFloat(g('fbSpend'))    || 0;
+        const gCost     = parseFloat(g('googleCost')) || 0;
+        const totalSpend = fbSpend + gCost;
+        const costPerClose = closed ? totalSpend / closed : 0;
+        set('liveTotalSpend',  fmtDollar(totalSpend));
+        set('liveCostPerClose', closed ? fmtDollar(costPerClose) : '—');
+      }
+    };
+
+    allIds.forEach(id => {
       const el = container.querySelector('#' + id);
       if (el) el.addEventListener('input', updateLive);
     });
 
-    updateLive();
+    // Apply initial state
+    applyPausedState(pauseChk.checked);
 
+    // ── Save ──────────────────────────────────────────────────
     container.querySelector('#saveMktBtn').addEventListener('click', () => {
       const weekData = Storage.getWeek(weekStart) || { weekStart, weekEnd: getWeekEnd(weekStart) };
-      ids.forEach(id => {
+      const paused = pauseChk.checked;
+
+      weekData.adsPaused = paused;
+
+      allIds.forEach(id => {
         const el = container.querySelector('#' + id);
         if (!el) return;
+        // If ads paused, do not persist values from disabled ad fields
+        if (paused && AD_FIELD_IDS.includes(id)) {
+          delete weekData[id];
+          return;
+        }
         const v = el.value.trim();
         weekData[id] = (el.type === 'number' && v !== '') ? parseFloat(v) : (el.type === 'text' ? v : undefined);
         if (weekData[id] === undefined) delete weekData[id];
       });
+
       Storage.save(weekData);
       showConfirm(container, '#mktConfirm');
     });
 
+    // ── Clear ─────────────────────────────────────────────────
     container.querySelector('#clearMktBtn').addEventListener('click', () => {
       if (!confirm('Clear all marketing data for this week?')) return;
       const weekData = Storage.getWeek(weekStart) || { weekStart, weekEnd: getWeekEnd(weekStart) };
-      ids.forEach(id => delete weekData[id]);
+      [...allIds, 'adsPaused'].forEach(id => delete weekData[id]);
       Storage.save(weekData);
       Marketing.renderForm(container, weekStart, Storage.getWeek(weekStart));
     });
