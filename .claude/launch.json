@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "hbc-dashboard",
+      "runtimeExecutable": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "runtimeArgs": ["-ExecutionPolicy", "Bypass", "-NoProfile", "-File", "C:\\Users\\appas\\OneDrive\\Desktop\\HOUSEB~1\\serve.ps1"],
+      "port": 3000
+    }
+  ]
+}

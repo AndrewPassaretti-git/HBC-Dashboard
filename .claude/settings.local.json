@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(where npx:*)",
+      "Bash(where node:*)",
+      "Bash(powershell -Command \"Get-Command npx -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; Get-Command python -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source; Get-Command python3 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(powershell -Command \"python --version 2>&1\")",
+      "Bash(powershell -Command \"Get-ChildItem ''C:\\\\Program Files'' -Filter ''node.exe'' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 3 FullName; Get-ChildItem ''C:\\\\Users\\\\appas'' -Filter ''node.exe'' -Recurse -Depth 5 -ErrorAction SilentlyContinue | Select-Object -First 3 FullName\")",
+      "Bash(powershell -Command \"Get-Command iisexpress -ErrorAction SilentlyContinue; Get-Command php -ErrorAction SilentlyContinue; dir ''C:\\\\Windows\\\\System32\\\\inetsrv\\\\'' -ErrorAction SilentlyContinue | Select-Object -First 3\")",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \"Start-Job { Set-Location ''C:\\\\Users\\\\appas\\\\OneDrive\\\\Desktop\\\\HouseBath Dashboard''; powershell -ExecutionPolicy Bypass -File serve.ps1 }; Start-Sleep 2; Invoke-WebRequest http://localhost:3000/ -UseBasicParsing | Select-Object -ExpandProperty StatusCode\")",
+      "Bash(powershell -Command \"Stop-Job -Name Job1 -ErrorAction SilentlyContinue; Remove-Job -Name Job1 -ErrorAction SilentlyContinue; netstat -an | findstr '':3000''\")",
+      "Bash(powershell -Command \"Start-Process ''C:\\\\Windows\\\\System32\\\\cmd.exe'' -ArgumentList ''/c'',''C:\\\\Users\\\\appas\\\\OneDrive\\\\Desktop\\\\HouseBath Dashboard\\\\serve.bat'' -WindowStyle Hidden; Start-Sleep 3; \\(Invoke-WebRequest ''http://localhost:3000/'' -UseBasicParsing -ErrorAction SilentlyContinue\\).StatusCode\")",
+      "Bash(powershell -ExecutionPolicy Bypass -Command \":*)",
+      "Bash(powershell -Command \":*)"
+    ]
+  }
+}
