@@ -7,10 +7,10 @@
 function getCurrentWeekStart() {
   const now = new Date();
   const day = now.getDay(); // 0=Sun, 1=Mon...
-  const diff = (day === 0) ? -6 : 1 - day; // shift to Monday
-  const mon = new Date(now);
-  mon.setDate(now.getDate() + diff);
-  return toISODate(mon);
+  const diff = -day; // shift back to Sunday (0 when already Sunday)
+  const sun = new Date(now);
+  sun.setDate(now.getDate() + diff);
+  return toISODate(sun);
 }
 
 function getWeekEnd(weekStart) {
