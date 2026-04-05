@@ -47,8 +47,8 @@ const Operations = {
             <div class="panel">
               <div class="panel-header"><span class="panel-title">Schedule Status</span></div>
               <div class="panel-body">
-                ${statRow('Schedule Length', e.scheduleLength != null ? e.scheduleLength + ' days out' : '—')}
-                ${statRow('Schedule Value', e.scheduleValue != null ? fmtDollar(e.scheduleValue) : '—')}
+                ${statRow('Schedule length (as of week end)', e.scheduleLength != null ? e.scheduleLength + ' days out' : '—')}
+                ${statRow('Schedule value (as of week end)', e.scheduleValue != null ? fmtDollar(e.scheduleValue) : '—')}
                 ${statRow('Cancellations', fmt(e.cancellations))}
                 ${statRow('Reschedules', fmt(e.reschedules))}
                 ${statRow('Cancellation Rate', fmtPct(cancelRate))}

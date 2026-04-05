@@ -35,6 +35,8 @@ const Dashboard = {
 
         ${this.renderTier1(all, latest)}
 
+        ${this.renderForwardLooking(latest)}
+
         <div class="home-bottom">
           ${this.renderDeltaPanel(latest, prev)}
           ${this.renderSparklinePanel(all)}
@@ -119,6 +121,39 @@ const Dashboard = {
         <div class="metric-card tier1">
           <span class="metric-label">Current Pipeline</span>
           <span class="metric-value">${currentPipeline != null ? fmtDollar(currentPipeline) : '—'}</span>
+        </div>
+      </div>
+    `;
+  },
+
+  // ── Forward-looking indicators (point-in-time, not averaged) ─
+  renderForwardLooking(latest) {
+    const hasLength = latest?.scheduleLength != null;
+    const hasValue  = latest?.scheduleValue  != null;
+    if (!hasLength && !hasValue) return '';
+
+    // Label shows the week-end date so readers know the snapshot date
+    const asOf = latest.weekEnd
+      ? 'As of ' + formatWeekRange(latest.weekEnd, latest.weekEnd)
+      : '';
+
+    return `
+      <div class="section" style="margin-top:16px">
+        <div class="section-title" style="display:flex;align-items:center;gap:10px">
+          Forward-looking indicators
+          ${asOf ? `<span style="font-size:11px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">${asOf}</span>` : ''}
+        </div>
+        <div class="cards-grid-3">
+          <div class="metric-card">
+            <span class="metric-label">Schedule Length</span>
+            <span class="metric-value">${hasLength ? latest.scheduleLength + ' days' : '—'}</span>
+            <span class="metric-sub" style="font-size:10px;color:var(--text-muted)">Days booked out</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Schedule Value</span>
+            <span class="metric-value">${hasValue ? fmtDollar(latest.scheduleValue) : '—'}</span>
+            <span class="metric-sub" style="font-size:10px;color:var(--text-muted)">Value on the books</span>
+          </div>
         </div>
       </div>
     `;
