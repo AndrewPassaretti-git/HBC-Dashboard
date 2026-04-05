@@ -1,5 +1,5 @@
 /**
- * dashboard.js — Home page render (Tier 1 trailing-avg KPIs + deltas + sparkline)
+ * dashboard.js — Home page render (Tier 1 trailing-avg KPIs + forward schedule + sparkline)
  */
 
 // Module-level trailing period — persists across re-renders within a session.
@@ -9,8 +9,7 @@ const Dashboard = {
 
   render(container) {
     const all    = Storage.getAll();
-    const latest = all.length     ? all[0] : null;
-    const prev   = all.length > 1 ? all[1] : null;
+    const latest = all.length ? all[0] : null;
 
     const html = `
       <div class="page">
@@ -35,10 +34,8 @@ const Dashboard = {
 
         ${this.renderTier1(all, latest)}
 
-        ${this.renderForwardLooking(latest)}
-
         <div class="home-bottom">
-          ${this.renderDeltaPanel(latest, prev)}
+          ${this.renderForwardSchedule(latest)}
           ${this.renderSparklinePanel(all)}
         </div>
       </div>
@@ -76,7 +73,7 @@ const Dashboard = {
     // 1. Revenue — trailing avg of grossRevenue
     const revAvg = avg(slice, e => e.grossRevenue ?? null);
 
-    // 2. Net Margin — trailing avg, computed per-entry
+    // 2. Net Margin — trailing avg, computed per-entry; skip weeks with no revenue
     const marginAvg = avg(slice, e => {
       const rev = e.grossRevenue || 0;
       if (!rev) return null;
@@ -97,8 +94,16 @@ const Dashboard = {
       e => (e.jobsOnTime || 0) / e.jobsCompleted
     );
 
-    // 5. Current Pipeline — latest week's quotesAwaitingValue (not an average)
+    // 5. Current Pipeline — latest week's quotesAwaitingValue (point-in-time, not averaged)
     const currentPipeline = latest?.quotesAwaitingValue ?? null;
+
+    // 6. Payroll % of revenue — (payroll + derekGP) / grossRevenue per week, then averaged;
+    //    skip any week where grossRevenue is zero or missing
+    const payrollPctAvg = avg(slice, e => {
+      const rev = e.grossRevenue || 0;
+      if (!rev) return null;
+      return ((e.payroll || 0) + (e.derekGP || 0)) / rev;
+    });
 
     return `
       <div class="tier1-grid">
@@ -122,121 +127,40 @@ const Dashboard = {
           <span class="metric-label">Current Pipeline</span>
           <span class="metric-value">${currentPipeline != null ? fmtDollar(currentPipeline) : '—'}</span>
         </div>
+        <div class="metric-card tier1">
+          <span class="metric-label">Payroll % of revenue <span style="font-size:10px;opacity:.55;font-weight:400">${label}</span></span>
+          <span class="metric-value">${payrollPctAvg != null ? fmtPct(payrollPctAvg) : '—'}</span>
+        </div>
       </div>
     `;
   },
 
-  // ── Forward-looking indicators (point-in-time, not averaged) ─
-  renderForwardLooking(latest) {
+  // ── Forward schedule panel (replaces delta panel) ───────────
+  // Point-in-time values from the most recent week entry.
+  renderForwardSchedule(latest) {
     const hasLength = latest?.scheduleLength != null;
     const hasValue  = latest?.scheduleValue  != null;
-    if (!hasLength && !hasValue) return '';
 
-    // Label shows the week-end date so readers know the snapshot date
-    const asOf = latest.weekEnd
-      ? 'As of ' + formatWeekRange(latest.weekEnd, latest.weekEnd)
-      : '';
-
-    return `
-      <div class="section" style="margin-top:16px">
-        <div class="section-title" style="display:flex;align-items:center;gap:10px">
-          Forward-looking indicators
-          ${asOf ? `<span style="font-size:11px;color:var(--text-muted);font-weight:400;text-transform:none;letter-spacing:0">${asOf}</span>` : ''}
-        </div>
-        <div class="cards-grid-3">
-          <div class="metric-card">
-            <span class="metric-label">Schedule Length</span>
-            <span class="metric-value">${hasLength ? latest.scheduleLength + ' days' : '—'}</span>
-            <span class="metric-sub" style="font-size:10px;color:var(--text-muted)">Days booked out</span>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">Schedule Value</span>
-            <span class="metric-value">${hasValue ? fmtDollar(latest.scheduleValue) : '—'}</span>
-            <span class="metric-sub" style="font-size:10px;color:var(--text-muted)">Value on the books</span>
-          </div>
-        </div>
-      </div>
-    `;
-  },
-
-  // ── Week-over-week delta panel ──────────────────────────────
-  // Compares the most recent completed week against the prior week.
-  renderDeltaPanel(rawCurr, rawPrev) {
-    // Compute our own derived values using the new field names
-    const derive = (e) => {
-      if (!e) return null;
-      const rev = e.grossRevenue || 0;
-      const totalExp = (e.payroll || 0) + (e.derekGP || 0) + (e.adSpendExpense || 0) +
-                       (e.vehicleFuel || 0) + (e.suppliesChemicals || 0) + (e.miscOther || 0);
-      const netProfit = rev - totalExp;
-      return {
-        revenue:      e.grossRevenue,
-        netMargin:    rev ? netProfit / rev : 0,
-        closeRate:    (e.quotesSentCount || 0) > 0
-                        ? (e.quotesConvertedCount || 0) / e.quotesSentCount : 0,
-        onTimeRate:   (e.jobsCompleted || 0) > 0
-                        ? (e.jobsOnTime || 0) / e.jobsCompleted : 0,
-        pipeline:     e.quotesAwaitingValue,
-      };
-    };
-
-    const curr = derive(rawCurr);
-    const prev = derive(rawPrev);
-
-    const metrics = [
-      { label: 'Revenue',      curr: curr?.revenue,    prev: prev?.revenue,    fmt: fmtDollar, higherBetter: true },
-      { label: 'Net Margin',   curr: curr?.netMargin,  prev: prev?.netMargin,  fmt: fmtPct,    higherBetter: true },
-      { label: 'Close Rate',   curr: curr?.closeRate,  prev: prev?.closeRate,  fmt: fmtPct,    higherBetter: true },
-      { label: 'On-Time Rate', curr: curr?.onTimeRate, prev: prev?.onTimeRate, fmt: fmtPct,    higherBetter: true },
-      { label: 'Pipeline',     curr: curr?.pipeline,   prev: prev?.pipeline,   fmt: fmtDollar, higherBetter: true },
-    ];
-
-    const rows = metrics.map(m => {
-      if (m.curr == null) {
-        return `
-          <div class="delta-item">
-            <span class="delta-name">${m.label}</span>
-            <div class="delta-right">
-              <span class="delta-val muted">—</span>
-            </div>
-          </div>`;
-      }
-      if (m.prev == null) {
-        return `
-          <div class="delta-item">
-            <span class="delta-name">${m.label}</span>
-            <div class="delta-right">
-              <span class="delta-val">${m.fmt(m.curr)}</span>
-              <span class="delta-neutral muted" style="font-size:11px">new</span>
-            </div>
-          </div>`;
-      }
-      const diff  = m.curr - m.prev;
-      const up    = diff >= 0;
-      const cls   = up === m.higherBetter ? 'delta-up' : 'delta-down';
-      const arrow = up ? '▲' : '▼';
-      const diffLabel = m.fmt === fmtDollar
-        ? (up ? '+' : '') + fmtDollar(diff)
-        : (up ? '+' : '') + fmtPct(diff);
-      return `
-        <div class="delta-item">
-          <span class="delta-name">${m.label}</span>
-          <div class="delta-right">
-            <span class="delta-val">${m.fmt(m.curr)}</span>
-            <span class="${cls} delta-arrow">${arrow}</span>
-            <span class="${cls} delta-val" style="font-size:11.5px">${diffLabel}</span>
-          </div>
-        </div>`;
-    }).join('');
+    // "As of [week end]" date label
+    const asOf = latest?.weekEnd
+      ? formatWeekRange(latest.weekEnd, latest.weekEnd)
+      : null;
 
     return `
       <div class="panel">
         <div class="panel-header">
-          <span class="panel-title">Week-over-Week</span>
-          ${rawPrev ? `<span class="muted" style="font-size:11px">vs ${formatWeekShort(rawPrev.weekStart)}</span>` : ''}
+          <span class="panel-title">Forward Schedule</span>
+          ${asOf ? `<span class="muted" style="font-size:11px">As of ${asOf}</span>` : ''}
         </div>
-        <div class="panel-body" style="padding: 8px 20px 12px;">
-          ${rows}
+        <div class="panel-body" style="padding:12px 20px 16px">
+          <div class="stat-row">
+            <span class="stat-label">Days booked out</span>
+            <span class="stat-value mono">${hasLength ? latest.scheduleLength + ' days' : '—'}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Value on books</span>
+            <span class="stat-value mono">${hasValue ? fmtDollar(latest.scheduleValue) : '—'}</span>
+          </div>
         </div>
       </div>
     `;
@@ -244,10 +168,10 @@ const Dashboard = {
 
   // ── Sparkline panel (last 8 weeks of revenue) ───────────────
   renderSparklinePanel(all) {
-    const data   = all.slice(0, 8).reverse();
-    const labels = data.map(e => formatWeekShort(e.weekStart));
-    const oldest = labels[0]                  || '';
-    const newest = labels[labels.length - 1]  || '';
+    const data    = all.slice(0, 8).reverse();
+    const labels  = data.map(e => formatWeekShort(e.weekStart));
+    const oldest  = labels[0]                 || '';
+    const newest  = labels[labels.length - 1] || '';
     const hasData = data.length > 0;
 
     return `
