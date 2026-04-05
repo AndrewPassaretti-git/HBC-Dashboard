@@ -153,25 +153,27 @@ const Marketing = {
     }
 
     function pipelinePanel(e) {
-      const convRate    = e.quotesSentCount ? (e.quotesConvertedCount || 0) / e.quotesSentCount : 0;
       const aging       = e.pipelineAgingWeeks || 0;
       const totalSpend  = e.adsPaused ? null : (e.fbSpend || 0) + (e.googleCost || 0);
       const costPerClose= (!e.adsPaused && e.quotesConvertedCount && totalSpend)
         ? totalSpend / e.quotesConvertedCount : null;
 
+      // Pipeline close rate: this week's converted ÷ prior week's awaiting count
+      const priorWeek           = Storage.getPriorWeek(e.weekStart);
+      const priorAwaitingCount  = priorWeek?.quotesAwaitingCount || 0;
+      const pipelineCloseRate   = priorAwaitingCount > 0
+        ? (e.quotesConvertedCount || 0) / priorAwaitingCount : null;
+
       let agingBadge = '';
       if (aging > 6)      agingBadge = '<span class="tag red"   style="margin-left:6px;font-size:10px">Stale</span>';
       else if (aging > 3) agingBadge = '<span class="tag amber" style="margin-left:6px;font-size:10px">Aging</span>';
-
-      const convTag = convRate >= 0.5 ? 'green' : convRate >= 0.3 ? 'amber' : 'red';
 
       return `
         <div class="section">
           <div class="section-title">Pipeline</div>
           <div class="panel">
             <div class="panel-header">
-              <span class="panel-title">Quotes &amp; Conversion</span>
-              <span class="tag ${convTag}">${fmtPct(convRate)} conversion</span>
+              <span class="panel-title">Quotes &amp; Pipeline</span>
             </div>
             <div class="panel-body">
               <div class="cards-grid-3" style="margin-bottom:16px">
@@ -191,7 +193,7 @@ const Marketing = {
                   <span class="metric-sub">${fmtDollar(e.quotesAwaitingValue)}</span>
                 </div>
               </div>
-              ${statRow('Conversion Rate', e.quotesSentCount ? fmtPct(convRate) : '—')}
+              ${statRow('Pipeline Close Rate', pipelineCloseRate != null ? fmtPct(pipelineCloseRate) : '—')}
               ${statRow('Pipeline Value', fmtDollar(e.quotesAwaitingValue))}
               <div class="stat-row">
                 <span class="stat-label">Pipeline Age</span>
@@ -468,10 +470,6 @@ const Marketing = {
           <!-- Live calcs -->
           <div class="live-calcs" id="mktLiveCalcs">
             <div class="live-calc-item">
-              <span class="live-calc-label">Conversion Rate</span>
-              <span class="live-calc-value" id="liveConvRate">—</span>
-            </div>
-            <div class="live-calc-item">
               <span class="live-calc-label">Total Ad Spend</span>
               <span class="live-calc-value" id="liveTotalSpend">—</span>
             </div>
@@ -565,10 +563,7 @@ const Marketing = {
     // ── Live calculations ─────────────────────────────────────
     const updateLive = () => {
       const paused = pauseChk.checked;
-      const sent   = parseFloat(container.querySelector('#quotesSentCount')?.value)     || 0;
       const conv   = parseFloat(container.querySelector('#quotesConvertedCount')?.value) || 0;
-
-      set('liveConvRate', sent ? fmtPct(conv / sent) : '—');
 
       if (paused) {
         set('liveTotalSpend',  'Paused');
