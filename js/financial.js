@@ -1,5 +1,10 @@
 /**
  * financial.js — Financial page view + form
+ *
+ * Revenue model: single field — grossRevenue (labeled "Revenue").
+ * netRevenue, cogs, and softwareTools have been removed.
+ * derekGP (Derek Guaranteed Payment, default $577/wk) is a separate expense
+ * line included in total-expense and net-profit calculations.
  */
 
 const Financial = {
@@ -10,20 +15,20 @@ const Financial = {
       return;
     }
     const e = entry;
+    const rev = e.grossRevenue || 0;
 
-    const grossMargin = e.netRevenue ? (e.netRevenue - (e.cogs || 0)) / e.netRevenue : 0;
     const expenses = [
-      { label: 'COGS',               value: e.cogs             || 0 },
-      { label: 'Payroll',            value: e.payroll          || 0 },
-      { label: 'Ad Spend',           value: e.adSpendExpense   || 0 },
-      { label: 'Vehicle / Fuel',     value: e.vehicleFuel      || 0 },
-      { label: 'Supplies / Chemicals',value: e.suppliesChemicals || 0 },
-      { label: 'Software / Tools',   value: e.softwareTools    || 0 },
-      { label: 'Misc / Other',       value: e.miscOther        || 0 },
+      { label: 'Payroll',                  value: e.payroll          || 0 },
+      { label: 'Derek — Guaranteed Payment',value: e.derekGP         || 0 },
+      { label: 'Ad Spend',                 value: e.adSpendExpense   || 0 },
+      { label: 'Vehicle / Fuel',           value: e.vehicleFuel      || 0 },
+      { label: 'Supplies / Chemicals',     value: e.suppliesChemicals|| 0 },
+      { label: 'Misc / Other',             value: e.miscOther        || 0 },
     ];
+
     const totalExpenses = expenses.reduce((s, ex) => s + ex.value, 0);
-    const netProfit = (e.netRevenue || 0) - totalExpenses;
-    const netMargin = e.netRevenue ? netProfit / e.netRevenue : 0;
+    const netProfit  = rev - totalExpenses;
+    const netMargin  = rev ? netProfit / rev : 0;
     const maxExpense = Math.max(...expenses.map(ex => ex.value), 1);
 
     container.innerHTML = `
@@ -33,23 +38,9 @@ const Financial = {
           <div class="section-title">Revenue</div>
           <div class="cards-grid-3">
             <div class="metric-card">
-              <span class="metric-label">Gross Revenue</span>
-              <span class="metric-value">${fmtDollar(e.grossRevenue)}</span>
+              <span class="metric-label">Revenue</span>
+              <span class="metric-value">${fmtDollar(rev)}</span>
             </div>
-            <div class="metric-card">
-              <span class="metric-label">Net Revenue</span>
-              <span class="metric-value">${fmtDollar(e.netRevenue)}</span>
-            </div>
-            <div class="metric-card">
-              <span class="metric-label">Gross Margin</span>
-              <span class="metric-value ${grossMargin >= 0.5 ? 'green' : grossMargin >= 0.3 ? 'amber' : 'red'}">${fmtPct(grossMargin)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="section mt-24">
-          <div class="section-title">P&amp;L Summary</div>
-          <div class="two-col">
             <div class="metric-card">
               <span class="metric-label">Net Profit</span>
               <span class="metric-value ${netProfit >= 0 ? 'green' : 'red'}">${fmtDollar(netProfit)}</span>
@@ -75,13 +66,13 @@ const Financial = {
                   </tr>
                 </thead>
                 <tbody>
-                  ${expenses.map(ex => expenseRow(ex.label, ex.value, e.netRevenue, maxExpense)).join('')}
+                  ${expenses.map(ex => expenseRow(ex.label, ex.value, rev, maxExpense)).join('')}
                 </tbody>
                 <tfoot>
                   <tr class="expense-total">
                     <td>Total Expenses</td>
                     <td>${fmtDollar(totalExpenses)}</td>
-                    <td>${e.netRevenue ? fmtPct(totalExpenses / e.netRevenue) : '—'}</td>
+                    <td>${rev ? fmtPct(totalExpenses / rev) : '—'}</td>
                     <td></td>
                   </tr>
                 </tfoot>
@@ -103,14 +94,14 @@ const Financial = {
       </div>
     `;
 
-    function expenseRow(label, value, netRev, maxVal) {
-      const pct = netRev && value ? value / netRev : 0;
+    function expenseRow(label, value, rev, maxVal) {
+      const pct      = rev && value ? value / rev : 0;
       const barWidth = maxVal ? Math.round((value / maxVal) * 100) : 0;
       return `
         <tr>
           <td>${label}</td>
           <td>${fmtDollar(value)}</td>
-          <td>${netRev ? fmtPct(pct) : '—'}</td>
+          <td>${rev ? fmtPct(pct) : '—'}</td>
           <td class="expense-bar-cell">
             <div class="expense-bar-track">
               <div class="expense-bar-fill" style="width:${barWidth}%"></div>
@@ -123,6 +114,8 @@ const Financial = {
 
   renderForm(container, weekStart, existing) {
     const e = existing || {};
+    // derekGP defaults to 577 for new entries
+    const derekGPDefault = e.derekGP != null ? e.derekGP : 577;
 
     container.innerHTML = `
       <div class="page form-page">
@@ -131,25 +124,8 @@ const Financial = {
           <div class="form-section-title">Revenue</div>
           <div class="form-row-2">
             <div class="form-group">
-              <label class="form-label">Gross Revenue ($)</label>
+              <label class="form-label">Revenue ($)</label>
               <input class="form-input" type="number" step="0.01" id="grossRevenue" value="${val(e.grossRevenue)}" placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Net Revenue ($) <span style="opacity:.5;font-size:11px">after refunds/discounts</span></label>
-              <input class="form-input" type="number" step="0.01" id="netRevenue" value="${val(e.netRevenue)}" placeholder="0.00">
-            </div>
-          </div>
-          <div class="form-row-2">
-            <div class="form-group">
-              <label class="form-label">COGS ($)</label>
-              <input class="form-input" type="number" step="0.01" id="cogs" value="${val(e.cogs)}" placeholder="0.00">
-            </div>
-          </div>
-
-          <div class="live-calcs">
-            <div class="live-calc-item">
-              <span class="live-calc-label">Gross Margin</span>
-              <span class="live-calc-value" id="liveGrossMargin">—</span>
             </div>
           </div>
         </div>
@@ -162,24 +138,25 @@ const Financial = {
               <input class="form-input" type="number" step="0.01" id="payroll" value="${val(e.payroll)}" placeholder="0.00">
             </div>
             <div class="form-group">
-              <label class="form-label">Ad Spend ($)</label>
-              <input class="form-input" type="number" step="0.01" id="adSpendExpense" value="${val(e.adSpendExpense)}" placeholder="0.00">
+              <label class="form-label">Derek — Guaranteed Payment ($)</label>
+              <input class="form-input" type="number" step="0.01" id="derekGP" value="${derekGPDefault}" placeholder="577.00">
+              <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Default $577/wk ($2,500/mo ÷ 4.33)</div>
             </div>
           </div>
           <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Ad Spend ($)</label>
+              <input class="form-input" type="number" step="0.01" id="adSpendExpense" value="${val(e.adSpendExpense)}" placeholder="0.00">
+            </div>
             <div class="form-group">
               <label class="form-label">Vehicle / Fuel ($)</label>
               <input class="form-input" type="number" step="0.01" id="vehicleFuel" value="${val(e.vehicleFuel)}" placeholder="0.00">
             </div>
-            <div class="form-group">
-              <label class="form-label">Supplies / Chemicals ($)</label>
-              <input class="form-input" type="number" step="0.01" id="suppliesChemicals" value="${val(e.suppliesChemicals)}" placeholder="0.00">
-            </div>
           </div>
           <div class="form-row-2">
             <div class="form-group">
-              <label class="form-label">Software / Tools ($)</label>
-              <input class="form-input" type="number" step="0.01" id="softwareTools" value="${val(e.softwareTools)}" placeholder="0.00">
+              <label class="form-label">Supplies / Chemicals ($)</label>
+              <input class="form-input" type="number" step="0.01" id="suppliesChemicals" value="${val(e.suppliesChemicals)}" placeholder="0.00">
             </div>
             <div class="form-group">
               <label class="form-label">Misc / Other ($)</label>
@@ -224,29 +201,26 @@ const Financial = {
 
   attachFormListeners(container, weekStart, existing) {
     const ids = [
-      'grossRevenue','netRevenue','cogs','payroll','adSpendExpense',
-      'vehicleFuel','suppliesChemicals','softwareTools','miscOther','notes'
+      'grossRevenue','payroll','derekGP','adSpendExpense',
+      'vehicleFuel','suppliesChemicals','miscOther','notes',
     ];
 
     const updateLive = () => {
-      const netRev  = parseFloat(g('netRevenue'))       || 0;
-      const cogs    = parseFloat(g('cogs'))             || 0;
-      const payroll = parseFloat(g('payroll'))          || 0;
-      const adSpend = parseFloat(g('adSpendExpense'))   || 0;
-      const fuel    = parseFloat(g('vehicleFuel'))      || 0;
-      const suppl   = parseFloat(g('suppliesChemicals'))|| 0;
-      const sw      = parseFloat(g('softwareTools'))    || 0;
-      const misc    = parseFloat(g('miscOther'))        || 0;
+      const rev     = parseFloat(g('grossRevenue'))       || 0;
+      const payroll = parseFloat(g('payroll'))            || 0;
+      const derek   = parseFloat(g('derekGP'))            || 0;
+      const adSpend = parseFloat(g('adSpendExpense'))     || 0;
+      const fuel    = parseFloat(g('vehicleFuel'))        || 0;
+      const suppl   = parseFloat(g('suppliesChemicals'))  || 0;
+      const misc    = parseFloat(g('miscOther'))          || 0;
 
-      const gm = netRev ? (netRev - cogs) / netRev : 0;
-      const totalExp = cogs + payroll + adSpend + fuel + suppl + sw + misc;
-      const netProfit = netRev - totalExp;
-      const netMargin = netRev ? netProfit / netRev : 0;
+      const totalExp  = payroll + derek + adSpend + fuel + suppl + misc;
+      const netProfit = rev - totalExp;
+      const netMargin = rev ? netProfit / rev : 0;
 
-      set('liveGrossMargin', netRev ? fmtPct(gm) : '—');
       set('liveTotalExpenses', fmtDollar(totalExp));
-      set('liveNetProfit', fmtDollar(netProfit));
-      set('liveNetMargin', netRev ? fmtPct(netMargin) : '—');
+      set('liveNetProfit',     fmtDollar(netProfit));
+      set('liveNetMargin',     rev ? fmtPct(netMargin) : '—');
     };
 
     ids.forEach(id => {

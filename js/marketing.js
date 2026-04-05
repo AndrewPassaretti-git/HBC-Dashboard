@@ -9,6 +9,14 @@ const AD_FIELD_IDS = [
   'googleConversions','googleConversionRate',
 ];
 
+// Pipeline field IDs that are saved via the normal loop
+const PIPELINE_IDS = [
+  'quotesSentCount','quotesSentValue',
+  'quotesConvertedCount','quotesConvertedValue',
+  'quotesLostCount','quotesLostValue',
+  'quotesAwaitingCount','quotesAwaitingValue',
+];
+
 const Marketing = {
 
   renderView(container, entry) {
@@ -101,10 +109,10 @@ const Marketing = {
     }
 
     function ga4Panel(e) {
-      const total = e.totalUsers || 0;
-      const direct = e.usersDirects || 0;
+      const total   = e.totalUsers   || 0;
+      const direct  = e.usersDirects || 0;
       const organic = e.usersOrganic || 0;
-      const referral = e.usersReferral || 0;
+      const referral= e.usersReferral|| 0;
       const pct = v => total ? Math.round((v / total) * 100) : 0;
 
       return `
@@ -145,41 +153,57 @@ const Marketing = {
     }
 
     function pipelinePanel(e) {
-      const closeRate = e.quotesSent ? e.quotesClosed / e.quotesSent : 0;
-      // Do not show ad spend-derived cost-per-close when ads were paused
-      const totalSpend = e.adsPaused ? null : (e.fbSpend || 0) + (e.googleCost || 0);
-      const costPerClose = (!e.adsPaused && e.quotesClosed && totalSpend) ? totalSpend / e.quotesClosed : null;
+      const convRate    = e.quotesSentCount ? (e.quotesConvertedCount || 0) / e.quotesSentCount : 0;
+      const aging       = e.pipelineAgingWeeks || 0;
+      const totalSpend  = e.adsPaused ? null : (e.fbSpend || 0) + (e.googleCost || 0);
+      const costPerClose= (!e.adsPaused && e.quotesConvertedCount && totalSpend)
+        ? totalSpend / e.quotesConvertedCount : null;
+
+      let agingBadge = '';
+      if (aging > 6)      agingBadge = '<span class="tag red"   style="margin-left:6px;font-size:10px">Stale</span>';
+      else if (aging > 3) agingBadge = '<span class="tag amber" style="margin-left:6px;font-size:10px">Aging</span>';
+
+      const convTag = convRate >= 0.5 ? 'green' : convRate >= 0.3 ? 'amber' : 'red';
 
       return `
         <div class="section">
           <div class="section-title">Pipeline</div>
           <div class="panel">
             <div class="panel-header">
-              <span class="panel-title">Quotes &amp; Close Rate</span>
-              <span class="tag ${closeRate >= 0.5 ? 'green' : closeRate >= 0.3 ? 'amber' : 'red'}">${fmtPct(closeRate)} close rate</span>
+              <span class="panel-title">Quotes &amp; Conversion</span>
+              <span class="tag ${convTag}">${fmtPct(convRate)} conversion</span>
             </div>
             <div class="panel-body">
-              <div class="cards-grid-4" style="margin-bottom:16px">
+              <div class="cards-grid-3" style="margin-bottom:16px">
                 <div class="metric-card">
                   <span class="metric-label">Quotes Sent</span>
-                  <span class="metric-value" style="font-size:24px">${fmt(e.quotesSent)}</span>
+                  <span class="metric-value" style="font-size:24px">${fmt(e.quotesSentCount)}</span>
+                  <span class="metric-sub">${fmtDollar(e.quotesSentValue)}</span>
                 </div>
                 <div class="metric-card">
-                  <span class="metric-label">Quotes Closed</span>
-                  <span class="metric-value" style="font-size:24px">${fmt(e.quotesClosed)}</span>
+                  <span class="metric-label">Converted</span>
+                  <span class="metric-value" style="font-size:24px">${fmt(e.quotesConvertedCount)}</span>
+                  <span class="metric-sub">${fmtDollar(e.quotesConvertedValue)}</span>
                 </div>
                 <div class="metric-card">
-                  <span class="metric-label">$ Value Sent</span>
-                  <span class="metric-value" style="font-size:24px">${fmtDollar(e.dollarValueQuotesSent)}</span>
-                </div>
-                <div class="metric-card">
-                  <span class="metric-label">Pipeline Value</span>
-                  <span class="metric-value" style="font-size:24px">${fmtDollar(e.pipelineValue)}</span>
+                  <span class="metric-label">Awaiting Response</span>
+                  <span class="metric-value" style="font-size:24px">${fmt(e.quotesAwaitingCount)}</span>
+                  <span class="metric-sub">${fmtDollar(e.quotesAwaitingValue)}</span>
                 </div>
               </div>
-              <div class="two-col">
-                ${statPanel('Total Ad Spend', e.adsPaused ? '—' : fmtDollar(totalSpend), e.adsPaused ? 'Ads paused' : '')}
-                ${statPanel('Cost Per Close', costPerClose != null ? fmtDollar(costPerClose) : '—', e.adsPaused ? 'Ads paused' : '')}
+              ${statRow('Conversion Rate', e.quotesSentCount ? fmtPct(convRate) : '—')}
+              ${statRow('Pipeline Value', fmtDollar(e.quotesAwaitingValue))}
+              <div class="stat-row">
+                <span class="stat-label">Pipeline Age</span>
+                <span class="stat-value" style="display:flex;align-items:center">
+                  <span class="mono">${aging} week${aging !== 1 ? 's' : ''}</span>${agingBadge}
+                </span>
+              </div>
+              <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+                <div class="two-col">
+                  ${statPanel('Total Ad Spend', e.adsPaused ? '—' : fmtDollar(totalSpend), e.adsPaused ? 'Ads paused' : '')}
+                  ${statPanel('Cost Per Close', costPerClose != null ? fmtDollar(costPerClose) : '—', e.adsPaused ? 'Ads paused' : '')}
+                </div>
               </div>
             </div>
           </div>
@@ -214,12 +238,44 @@ const Marketing = {
   },
 
   renderForm(container, weekStart, existing) {
-    const e = existing || {};
+    const e      = existing || {};
     const paused = !!e.adsPaused;
+
+    // ── Pipeline prior-week context ────────────────────────────
+    const priorWeek          = Storage.getPriorWeek(weekStart);
+    const priorAwaitingCount = priorWeek?.quotesAwaitingCount || 0;
+    const priorAwaitingValue = priorWeek?.quotesAwaitingValue || 0;
+
+    // Initial awaiting values — use saved if editing, else auto-calc from prior week
+    let initAwaitingCount, initAwaitingValue;
+    if (e.quotesAwaitingCount != null) {
+      initAwaitingCount = e.quotesAwaitingCount;
+      initAwaitingValue = e.quotesAwaitingValue != null ? e.quotesAwaitingValue : 0;
+    } else {
+      const s  = e.quotesSentCount      || 0;
+      const sv = e.quotesSentValue      || 0;
+      const c  = e.quotesConvertedCount || 0;
+      const cv = e.quotesConvertedValue || 0;
+      const l  = e.quotesLostCount      || 0;
+      const lv = e.quotesLostValue      || 0;
+      initAwaitingCount = Math.max(0, priorAwaitingCount + s - c - l);
+      initAwaitingValue = Math.max(0, priorAwaitingValue + sv - cv - lv);
+    }
+
+    // Base aging weeks — preserved if editing, else auto-incremented from prior
+    let baseAgingWeeks;
+    if (e.pipelineAgingWeeks != null) {
+      baseAgingWeeks = e.pipelineAgingWeeks;
+    } else {
+      const priorAging        = priorWeek?.pipelineAgingWeeks || 0;
+      const priorHadAwaiting  = (priorWeek?.quotesAwaitingValue || 0) > 0;
+      baseAgingWeeks = priorHadAwaiting ? priorAging + 1 : 1;
+    }
 
     container.innerHTML = `
       <div class="page form-page">
 
+        <!-- Ads paused toggle -->
         <div style="margin-bottom:24px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);display:flex;align-items:center;gap:14px">
           <label style="display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none;margin:0">
             <input type="checkbox" id="adsPaused" ${paused ? 'checked' : ''}
@@ -229,6 +285,7 @@ const Marketing = {
           <span style="font-size:12px;color:var(--text-muted)">Greys out all FB &amp; Google ad fields and excludes this week from ad averages</span>
         </div>
 
+        <!-- Facebook Ads -->
         <div class="form-section">
           <div class="form-section-title">Facebook / Meta Ads</div>
           <div id="fbAdFields">
@@ -263,6 +320,7 @@ const Marketing = {
           </div>
         </div>
 
+        <!-- Google Ads -->
         <div class="form-section">
           <div class="form-section-title">Google Ads</div>
           <div id="googleAdFields">
@@ -303,6 +361,7 @@ const Marketing = {
           </div>
         </div>
 
+        <!-- GA4 Traffic -->
         <div class="form-section">
           <div class="form-section-title">GA4 Traffic</div>
           <div class="form-row-2">
@@ -333,33 +392,84 @@ const Marketing = {
           </div>
         </div>
 
+        <!-- Pipeline -->
         <div class="form-section">
           <div class="form-section-title">Pipeline</div>
-          <div class="form-row-2">
-            <div class="form-group">
-              <label class="form-label">Quotes Sent</label>
-              <input class="form-input" type="number" id="quotesSent" value="${val(e.quotesSent)}" placeholder="0">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Quotes Closed</label>
-              <input class="form-input" type="number" id="quotesClosed" value="${val(e.quotesClosed)}" placeholder="0">
-            </div>
-          </div>
-          <div class="form-row-2">
-            <div class="form-group">
-              <label class="form-label">$ Value of Quotes Sent</label>
-              <input class="form-input" type="number" step="0.01" id="dollarValueQuotesSent" value="${val(e.dollarValueQuotesSent)}" placeholder="0.00">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Pipeline Value ($)</label>
-              <input class="form-input" type="number" step="0.01" id="pipelineValue" value="${val(e.pipelineValue)}" placeholder="0.00">
+
+          <!-- Quotes Sent -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quotes Sent</div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">Count</label>
+                <input class="form-input" type="number" id="quotesSentCount" value="${val(e.quotesSentCount)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Value ($)</label>
+                <input class="form-input" type="number" step="0.01" id="quotesSentValue" value="${val(e.quotesSentValue)}" placeholder="0.00">
+              </div>
             </div>
           </div>
 
+          <!-- Quotes Converted -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quotes Converted</div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">Count</label>
+                <input class="form-input" type="number" id="quotesConvertedCount" value="${val(e.quotesConvertedCount)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Value ($)</label>
+                <input class="form-input" type="number" step="0.01" id="quotesConvertedValue" value="${val(e.quotesConvertedValue)}" placeholder="0.00">
+              </div>
+            </div>
+          </div>
+
+          <!-- Quotes Lost -->
+          <div style="margin-bottom:20px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Quotes Lost</div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">Count</label>
+                <input class="form-input" type="number" id="quotesLostCount" value="${val(e.quotesLostCount)}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Value ($)</label>
+                <input class="form-input" type="number" step="0.01" id="quotesLostValue" value="${val(e.quotesLostValue)}" placeholder="0.00">
+              </div>
+            </div>
+          </div>
+
+          <!-- Quotes Awaiting (auto-calc) -->
+          <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:16px">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+              <span style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Quotes Awaiting Response</span>
+              <span style="font-size:11px;color:var(--text-muted);font-style:italic">Auto-calculated from prior week. Override if needed.</span>
+            </div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">Count</label>
+                <input class="form-input" type="number" id="quotesAwaitingCount" value="${initAwaitingCount}" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Value ($)</label>
+                <input class="form-input" type="number" step="0.01" id="quotesAwaitingValue" value="${Number(initAwaitingValue).toFixed(2)}" placeholder="0.00">
+              </div>
+            </div>
+          </div>
+
+          <!-- Pipeline Age (read-only display) -->
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--surface-2);border-radius:8px;margin-bottom:16px">
+            <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Pipeline Age</span>
+            <span id="pipelineAgingDisplay" style="font-size:13px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:4px">—</span>
+          </div>
+
+          <!-- Live calcs -->
           <div class="live-calcs" id="mktLiveCalcs">
             <div class="live-calc-item">
-              <span class="live-calc-label">Close Rate</span>
-              <span class="live-calc-value" id="liveCloseRate">—</span>
+              <span class="live-calc-label">Conversion Rate</span>
+              <span class="live-calc-value" id="liveConvRate">—</span>
             </div>
             <div class="live-calc-item">
               <span class="live-calc-label">Total Ad Spend</span>
@@ -380,14 +490,20 @@ const Marketing = {
       </div>
     `;
 
-    this.attachFormListeners(container, weekStart, existing);
+    this.attachFormListeners(container, weekStart, existing, {
+      priorAwaitingCount,
+      priorAwaitingValue,
+      baseAgingWeeks,
+    });
   },
 
-  attachFormListeners(container, weekStart, existing) {
+  attachFormListeners(container, weekStart, existing, pipelineCtx) {
+    const { priorAwaitingCount, priorAwaitingValue, baseAgingWeeks } = pipelineCtx;
+
     const nonAdIds = [
       'totalUsers','usersDirects','usersOrganic','usersReferral',
-      'leadSourceAttribution','quotesSent','quotesClosed',
-      'dollarValueQuotesSent','pipelineValue',
+      'leadSourceAttribution',
+      ...PIPELINE_IDS,
     ];
     const allIds = [...AD_FIELD_IDS, ...nonAdIds];
 
@@ -398,65 +514,116 @@ const Marketing = {
       AD_FIELD_IDS.forEach(id => {
         const el = container.querySelector('#' + id);
         if (!el) return;
-        el.disabled = paused;
-        el.style.opacity = paused ? '0.35' : '';
-        el.style.cursor  = paused ? 'not-allowed' : '';
+        el.disabled       = paused;
+        el.style.opacity  = paused ? '0.35' : '';
+        el.style.cursor   = paused ? 'not-allowed' : '';
       });
-      // Update live calcs immediately when toggling
       updateLive();
     };
 
     pauseChk.addEventListener('change', () => applyPausedState(pauseChk.checked));
 
+    // ── Awaiting auto-recalc (triggered by sent/converted/lost changes) ──
+    const awaitingTriggers = [
+      'quotesSentCount','quotesSentValue',
+      'quotesConvertedCount','quotesConvertedValue',
+      'quotesLostCount','quotesLostValue',
+    ];
+
+    const recalcAwaiting = () => {
+      const sent    = parseFloat(container.querySelector('#quotesSentCount')?.value)      || 0;
+      const sentVal = parseFloat(container.querySelector('#quotesSentValue')?.value)      || 0;
+      const conv    = parseFloat(container.querySelector('#quotesConvertedCount')?.value)  || 0;
+      const convVal = parseFloat(container.querySelector('#quotesConvertedValue')?.value)  || 0;
+      const lost    = parseFloat(container.querySelector('#quotesLostCount')?.value)       || 0;
+      const lostVal = parseFloat(container.querySelector('#quotesLostValue')?.value)       || 0;
+
+      const awCount = Math.max(0, priorAwaitingCount + sent - conv - lost);
+      const awVal   = Math.max(0, priorAwaitingValue + sentVal - convVal - lostVal);
+
+      const awCountEl = container.querySelector('#quotesAwaitingCount');
+      const awValEl   = container.querySelector('#quotesAwaitingValue');
+      if (awCountEl) awCountEl.value = awCount;
+      if (awValEl)   awValEl.value   = awVal.toFixed(2);
+    };
+
+    // ── Pipeline Age display ──────────────────────────────────
+    const updateAging = () => {
+      const awVal      = parseFloat(container.querySelector('#quotesAwaitingValue')?.value) || 0;
+      const agingWeeks = awVal === 0 ? 0 : baseAgingWeeks;
+      const agingEl    = container.querySelector('#pipelineAgingDisplay');
+      if (!agingEl) return;
+
+      let badge = '';
+      if (agingWeeks > 6)      badge = '<span class="tag red"   style="margin-left:6px;font-size:10px">Stale</span>';
+      else if (agingWeeks > 3) badge = '<span class="tag amber" style="margin-left:6px;font-size:10px">Aging</span>';
+
+      agingEl.innerHTML =
+        `<span class="mono">${agingWeeks} week${agingWeeks !== 1 ? 's' : ''}</span>${badge}`;
+    };
+
     // ── Live calculations ─────────────────────────────────────
     const updateLive = () => {
       const paused = pauseChk.checked;
-      const sent   = parseFloat(g('quotesSent'))  || 0;
-      const closed = parseFloat(g('quotesClosed')) || 0;
-      const closeRate = sent ? closed / sent : 0;
+      const sent   = parseFloat(container.querySelector('#quotesSentCount')?.value)     || 0;
+      const conv   = parseFloat(container.querySelector('#quotesConvertedCount')?.value) || 0;
 
-      set('liveCloseRate', sent ? fmtPct(closeRate) : '—');
+      set('liveConvRate', sent ? fmtPct(conv / sent) : '—');
 
       if (paused) {
         set('liveTotalSpend',  'Paused');
         set('liveCostPerClose','—');
       } else {
-        const fbSpend   = parseFloat(g('fbSpend'))    || 0;
-        const gCost     = parseFloat(g('googleCost')) || 0;
-        const totalSpend = fbSpend + gCost;
-        const costPerClose = closed ? totalSpend / closed : 0;
-        set('liveTotalSpend',  fmtDollar(totalSpend));
-        set('liveCostPerClose', closed ? fmtDollar(costPerClose) : '—');
+        const fbSpend = parseFloat(container.querySelector('#fbSpend')?.value)    || 0;
+        const gCost   = parseFloat(container.querySelector('#googleCost')?.value) || 0;
+        const total   = fbSpend + gCost;
+        set('liveTotalSpend',  fmtDollar(total));
+        set('liveCostPerClose', conv ? fmtDollar(total / conv) : '—');
       }
+
+      updateAging();
     };
 
+    // ── Wire input listeners ──────────────────────────────────
     allIds.forEach(id => {
       const el = container.querySelector('#' + id);
-      if (el) el.addEventListener('input', updateLive);
+      if (!el) return;
+      if (awaitingTriggers.includes(id)) {
+        el.addEventListener('input', () => { recalcAwaiting(); updateLive(); });
+      } else {
+        el.addEventListener('input', updateLive);
+      }
     });
 
-    // Apply initial state
+    // Apply initial paused state and aging display
     applyPausedState(pauseChk.checked);
+    updateAging();
 
     // ── Save ──────────────────────────────────────────────────
     container.querySelector('#saveMktBtn').addEventListener('click', () => {
       const weekData = Storage.getWeek(weekStart) || { weekStart, weekEnd: getWeekEnd(weekStart) };
-      const paused = pauseChk.checked;
+      const paused   = pauseChk.checked;
 
       weekData.adsPaused = paused;
 
       allIds.forEach(id => {
         const el = container.querySelector('#' + id);
         if (!el) return;
-        // If ads paused, do not persist values from disabled ad fields
+        // When ads paused, do not persist values from disabled ad fields
         if (paused && AD_FIELD_IDS.includes(id)) {
           delete weekData[id];
           return;
         }
         const v = el.value.trim();
-        weekData[id] = (el.type === 'number' && v !== '') ? parseFloat(v) : (el.type === 'text' ? v : undefined);
+        weekData[id] = (el.type === 'number' && v !== '')
+          ? parseFloat(v)
+          : (el.type === 'text' ? v : undefined);
         if (weekData[id] === undefined) delete weekData[id];
       });
+
+      // pipelineAgingWeeks: reset to 0 if awaiting is zeroed out
+      const awVal = parseFloat(container.querySelector('#quotesAwaitingValue')?.value) || 0;
+      weekData.pipelineAgingWeeks = awVal === 0 ? 0 : baseAgingWeeks;
 
       Storage.save(weekData);
       showConfirm(container, '#mktConfirm');
@@ -466,7 +633,7 @@ const Marketing = {
     container.querySelector('#clearMktBtn').addEventListener('click', () => {
       if (!confirm('Clear all marketing data for this week?')) return;
       const weekData = Storage.getWeek(weekStart) || { weekStart, weekEnd: getWeekEnd(weekStart) };
-      [...allIds, 'adsPaused'].forEach(id => delete weekData[id]);
+      [...allIds, 'adsPaused', 'pipelineAgingWeeks'].forEach(id => delete weekData[id]);
       Storage.save(weekData);
       Marketing.renderForm(container, weekStart, Storage.getWeek(weekStart));
     });

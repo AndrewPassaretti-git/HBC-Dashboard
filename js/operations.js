@@ -13,6 +13,9 @@ const Operations = {
     const onTimeRate = e.jobsCompleted ? (e.jobsOnTime / e.jobsCompleted) : 0;
     const cancelRate = e.jobsScheduled ? (e.cancellations / e.jobsScheduled) : 0;
 
+    const shGal   = e.shInventoryGallons   != null ? e.shInventoryGallons   : null;
+    const surfGal = e.surfactantInventoryGallons != null ? e.surfactantInventoryGallons : null;
+
     container.innerHTML = `
       <div class="page">
 
@@ -45,6 +48,7 @@ const Operations = {
               <div class="panel-header"><span class="panel-title">Schedule Status</span></div>
               <div class="panel-body">
                 ${statRow('Schedule Length', e.scheduleLength != null ? e.scheduleLength + ' days out' : '—')}
+                ${statRow('Schedule Value', e.scheduleValue != null ? fmtDollar(e.scheduleValue) : '—')}
                 ${statRow('Cancellations', fmt(e.cancellations))}
                 ${statRow('Reschedules', fmt(e.reschedules))}
                 ${statRow('Cancellation Rate', fmtPct(cancelRate))}
@@ -65,10 +69,8 @@ const Operations = {
             <div class="panel">
               <div class="panel-header"><span class="panel-title">Inventory Levels</span></div>
               <div class="panel-body">
-                <div style="display:flex;flex-direction:column;gap:20px">
-                  ${inventoryBar('Sodium Hypochlorite (SH)', e.shInventoryPct)}
-                  ${inventoryBar('Surfactant', e.surfactantInventoryPct)}
-                </div>
+                ${inventoryStat('Sodium Hypochlorite (SH)', shGal, 50)}
+                ${inventoryStat('Surfactant', surfGal, 10)}
               </div>
             </div>
           </div>
@@ -77,17 +79,16 @@ const Operations = {
       </div>
     `;
 
-    function inventoryBar(name, pct) {
-      const p = pct ?? 0;
-      const cls = p < 25 ? 'danger' : p < 50 ? 'warn' : 'ok';
+    function inventoryStat(name, gallons, lowThreshold) {
+      const isLow = gallons != null && gallons < lowThreshold;
       return `
-        <div class="progress-wrap">
-          <div class="progress-label-row">
-            <span class="progress-name">${name}</span>
-            <span class="progress-pct ${cls === 'danger' ? 'red' : cls === 'warn' ? 'amber' : 'teal'}">${p}%</span>
-          </div>
-          <div class="progress-track">
-            <div class="progress-fill ${cls}" style="width:${Math.min(p, 100)}%"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px;color:var(--text-muted)">${name}</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="mono" style="font-size:16px;font-weight:500;color:var(--text)">
+              ${gallons != null ? gallons + ' gal' : '—'}
+            </span>
+            ${isLow ? '<span class="tag red" style="font-size:10px">Low stock</span>' : ''}
           </div>
         </div>
       `;
@@ -150,6 +151,10 @@ const Operations = {
               <label class="form-label">Employee Hours</label>
               <input class="form-input" type="number" step="0.5" id="employeeHours" value="${val(e.employeeHours)}" placeholder="0">
             </div>
+            <div class="form-group">
+              <label class="form-label">Schedule Value ($)</label>
+              <input class="form-input" type="number" step="0.01" id="scheduleValue" value="${val(e.scheduleValue)}" placeholder="0.00">
+            </div>
           </div>
         </div>
 
@@ -157,22 +162,22 @@ const Operations = {
           <div class="form-section-title">Inventory</div>
           <div class="form-row-2">
             <div class="form-group">
-              <label class="form-label">SH Inventory (%)</label>
-              <input class="form-input" type="number" min="0" max="100" id="shInventoryPct" value="${val(e.shInventoryPct)}" placeholder="0–100">
+              <label class="form-label">SH Inventory (gallons)</label>
+              <input class="form-input" type="number" step="0.1" id="shInventoryGallons" value="${val(e.shInventoryGallons)}" placeholder="0">
             </div>
             <div class="form-group">
-              <label class="form-label">Surfactant Inventory (%)</label>
-              <input class="form-input" type="number" min="0" max="100" id="surfactantInventoryPct" value="${val(e.surfactantInventoryPct)}" placeholder="0–100">
+              <label class="form-label">Surfactant Inventory (gallons)</label>
+              <input class="form-input" type="number" step="0.1" id="surfactantInventoryGallons" value="${val(e.surfactantInventoryGallons)}" placeholder="0">
             </div>
           </div>
           <div class="live-calcs" id="invLiveCalcs" style="margin-top:0">
             <div class="live-calc-item">
               <span class="live-calc-label">SH Level</span>
-              <span class="live-calc-value" id="liveShPct">—</span>
+              <span class="live-calc-value" id="liveShGal">—</span>
             </div>
             <div class="live-calc-item">
               <span class="live-calc-label">Surfactant Level</span>
-              <span class="live-calc-value" id="liveSurfPct">—</span>
+              <span class="live-calc-value" id="liveSurfGal">—</span>
             </div>
           </div>
         </div>
@@ -191,21 +196,34 @@ const Operations = {
   attachFormListeners(container, weekStart, existing) {
     const ids = [
       'jobsScheduled','jobsCompleted','jobsOnTime','scheduleLength',
-      'cancellations','reschedules','employeeHours','shInventoryPct','surfactantInventoryPct'
+      'cancellations','reschedules','employeeHours','scheduleValue',
+      'shInventoryGallons','surfactantInventoryGallons',
     ];
 
     const updateLive = () => {
       const scheduled = parseFloat(g('jobsScheduled')) || 0;
       const completed = parseFloat(g('jobsCompleted')) || 0;
-      const onTime    = parseFloat(g('jobsOnTime')) || 0;
+      const onTime    = parseFloat(g('jobsOnTime'))    || 0;
       const cancels   = parseFloat(g('cancellations')) || 0;
-      const sh        = parseFloat(g('shInventoryPct'));
-      const surf      = parseFloat(g('surfactantInventoryPct'));
+      const sh        = parseFloat(g('shInventoryGallons'));
+      const surf      = parseFloat(g('surfactantInventoryGallons'));
 
       set('liveOnTimeRate', completed ? fmtPct(onTime / completed) : '—');
       set('liveCancelRate', scheduled ? fmtPct(cancels / scheduled) : '—');
-      set('liveShPct', !isNaN(sh) ? sh + '%' : '—');
-      set('liveSurfPct', !isNaN(surf) ? surf + '%' : '—');
+
+      // SH gallons with low-stock coloring
+      const shEl = document.getElementById('liveShGal');
+      if (shEl) {
+        shEl.textContent = !isNaN(sh) ? sh + ' gal' : '—';
+        shEl.style.color = (!isNaN(sh) && sh < 50) ? 'var(--red)' : '';
+      }
+
+      // Surfactant gallons with low-stock coloring
+      const surfEl = document.getElementById('liveSurfGal');
+      if (surfEl) {
+        surfEl.textContent = !isNaN(surf) ? surf + ' gal' : '—';
+        surfEl.style.color = (!isNaN(surf) && surf < 10) ? 'var(--red)' : '';
+      }
     };
 
     ids.forEach(id => {

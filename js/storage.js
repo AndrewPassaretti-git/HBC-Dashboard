@@ -24,6 +24,12 @@ const Storage = {
     return this.getAll().slice(0, n);
   },
 
+  // Returns the most recent entry whose weekStart is strictly before the given weekStart.
+  // Entries are stored sorted descending, so the first match is the immediately prior week.
+  getPriorWeek(weekStart) {
+    return this.getAll().find(e => e.weekStart < weekStart) || null;
+  },
+
   save(entry) {
     const all = this.getAll();
     const idx = all.findIndex(e => e.weekStart === entry.weekStart);
