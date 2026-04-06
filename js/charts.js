@@ -1,5 +1,5 @@
 /**
- * charts.js — Canvas sparkline renderer for HBC Dashboard
+ * charts.js — Canvas chart renderers for HBC Dashboard
  */
 
 const Charts = {
@@ -27,18 +27,18 @@ const Charts = {
    */
   drawSparkline(canvas, data, opts = {}) {
     const {
-      lineColor = '#0fb8a0',
-      fillColor = 'rgba(15, 184, 160, 0.12)',
-      dotColor = '#0fb8a0',
+      lineColor   = '#0fb8a0',
+      fillColor   = 'rgba(15, 184, 160, 0.12)',
+      dotColor    = '#0fb8a0',
       noDataColor = 'rgba(240,244,248,0.15)',
-      padding = 10,
-      dotRadius = 3,
+      padding     = 10,
+      dotRadius   = 3,
     } = opts;
 
     const ctx = canvas.getContext('2d');
-    const W = canvas.offsetWidth || canvas.width;
+    const W = canvas.offsetWidth  || canvas.width;
     const H = canvas.offsetHeight || canvas.height;
-    canvas.width = W;
+    canvas.width  = W;
     canvas.height = H;
 
     ctx.clearRect(0, 0, W, H);
@@ -48,7 +48,7 @@ const Charts = {
     if (validData.length < 2) {
       // Draw flat placeholder line
       ctx.strokeStyle = noDataColor;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth   = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(padding, H / 2);
@@ -58,8 +58,8 @@ const Charts = {
       return;
     }
 
-    const min = Math.min(...validData);
-    const max = Math.max(...validData);
+    const min   = Math.min(...validData);
+    const max   = Math.max(...validData);
     const range = max - min || 1;
 
     const toX = (i) => padding + (i / (validData.length - 1)) * (W - padding * 2);
@@ -84,9 +84,9 @@ const Charts = {
       ctx.lineTo(p.x, p.y);
     });
     ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 2;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
     ctx.stroke();
 
     // Dots
@@ -98,8 +98,97 @@ const Charts = {
       ctx.fill();
       if (isLast) {
         ctx.strokeStyle = dotColor;
-        ctx.lineWidth = 2;
+        ctx.lineWidth   = 2;
         ctx.stroke();
+      }
+    });
+  },
+
+  /**
+   * Draw a bar chart on a canvas element.
+   * Null/missing values render as empty slots (no bar drawn).
+   * x-axis labels are drawn below each bar from the `labels` array.
+   *
+   * @param {HTMLCanvasElement}   canvas
+   * @param {(number|null)[]}     data   - values oldest first; null = no data that week
+   * @param {string[]}            labels - x-axis label per bar (same order as data)
+   * @param {object}              opts
+   */
+  drawBarChart(canvas, data, labels, opts = {}) {
+    const {
+      barColor    = '#0fb8a0',
+      barAlpha    = 0.8,
+      labelColor  = 'rgba(240,244,248,0.45)',
+      noDataColor = 'rgba(240,244,248,0.15)',
+      labelFont   = '9px "DM Mono", monospace',
+      paddingX    = 6,
+      paddingTop  = 8,
+      labelHeight = 16,
+    } = opts;
+
+    const ctx = canvas.getContext('2d');
+    const W   = canvas.offsetWidth  || canvas.width;
+    const H   = canvas.offsetHeight || canvas.height;
+    canvas.width  = W;
+    canvas.height = H;
+
+    ctx.clearRect(0, 0, W, H);
+
+    const n = data.length;
+    if (!n) return;
+
+    const chartH    = H - labelHeight - paddingTop;
+    const validVals = data.filter(v => v != null && !isNaN(v) && v > 0);
+
+    // No usable data — draw placeholder line
+    if (!validVals.length) {
+      ctx.strokeStyle = noDataColor;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(paddingX, paddingTop + chartH / 2);
+      ctx.lineTo(W - paddingX, paddingTop + chartH / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      return;
+    }
+
+    const maxVal = Math.max(...validVals);
+    const slotW  = (W - paddingX * 2) / n;
+    const barW   = slotW * 0.55;
+
+    data.forEach((v, i) => {
+      const slotX  = paddingX + i * slotW;
+      const barX   = slotX + (slotW - barW) / 2;
+      const hasVal = v != null && !isNaN(v) && v > 0;
+
+      if (hasVal) {
+        const barH = (v / maxVal) * chartH;
+        const barY = paddingTop + chartH - barH;
+        const r    = Math.min(3, barW / 2, barH / 2);
+
+        ctx.globalAlpha = barAlpha;
+        ctx.fillStyle   = barColor;
+        ctx.beginPath();
+        ctx.moveTo(barX + r, barY);
+        ctx.lineTo(barX + barW - r, barY);
+        ctx.quadraticCurveTo(barX + barW, barY, barX + barW, barY + r);
+        ctx.lineTo(barX + barW, barY + barH);
+        ctx.lineTo(barX, barY + barH);
+        ctx.lineTo(barX, barY + r);
+        ctx.quadraticCurveTo(barX, barY, barX + r, barY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // X-axis label
+      if (labels?.[i]) {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle   = labelColor;
+        ctx.font        = labelFont;
+        ctx.textAlign   = 'center';
+        ctx.fillText(labels[i], slotX + slotW / 2, H - 3);
       }
     });
   }
