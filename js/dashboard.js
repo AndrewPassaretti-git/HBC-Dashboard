@@ -10,6 +10,9 @@ const Dashboard = {
   render(container) {
     const all    = Storage.getAll();
     const latest = all.length ? all[0] : null;
+    // Forward schedule pulls from the prior completed week (index 1); fall back to index 0
+    // if fewer than two entries exist.
+    const scheduleSource = all.length > 1 ? all[1] : (all.length === 1 ? all[0] : null);
 
     const html = `
       <div class="page">
@@ -35,7 +38,7 @@ const Dashboard = {
         ${this.renderTier1(all, latest)}
 
         <div class="home-bottom">
-          ${this.renderForwardSchedule(latest)}
+          ${this.renderForwardSchedule(scheduleSource)}
           ${this.renderSparklinePanel(all)}
         </div>
       </div>
